@@ -1,0 +1,40 @@
+# ── Project documentation (personal learning files) ────────────────
+Project_Context.md
+DEV_NOTES.md
+
+# ── Junk / scratch files ────────────────────────────────────────────
+test
+test.txt
+
+# ── Dependencies ────────────────────────────────────────────────────
+node_modules/
+
+# ── Build output & compiled artifacts ───────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Compiled JS generated from TypeScript sources (kept out of the repo —
+# regenerate with the build step instead of committing)
+extension/**/*.js
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Environment & secrets ───────────────────────────────────────────
+.env
+.env.*
+*.pem
+
+# ── OS cruft ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
