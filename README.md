@@ -117,6 +117,8 @@ just rewrite words.
 
 - 💬 **Explain ("Why?")** — tells you *why* each change was made, so you learn to write
   better prompts yourself.
+- 🎚️ **Rewrite modes (Light / Balanced / Deep)** — pick how aggressively Prompter
+  improves your prompt; the choice persists across sessions.
 - 😌 **Passive & Active modes** — quietly hints at improvements; never covers your UI.
 - 🔌 **Platform adapters** — ChatGPT today; Claude, Gemini & more to come.
 
@@ -195,10 +197,9 @@ prompter/
 │   │   └── service-worker.ts
 │   └── icons/
 │
-├── backend/                    # Prompt intelligence service
-│   ├── api/                    # HTTP endpoints
-│   ├── analyzer/               # Prompt analysis logic
-│   └── rewriter/               # Prompt rewrite logic
+├── backend/                    # Prompt intelligence service (Node + Groq)
+│   ├── server.mjs              # Express server: POST /analyze → LLM
+│   └── .env.example            # GROQ_API_KEY template (copy to .env)
 │
 └── shared/                     # Types & schemas shared across layers
     ├── types.ts
@@ -212,9 +213,9 @@ prompter/
 | Phase | Goal                                              | Status            |
 |-------|---------------------------------------------------|-------------------|
 | 0     | Research (MV3, content scripts, adapters)         | ✅ Done           |
-| 1     | Extension prototype (mock improve → replace)      | 🚧 In progress    |
-| 2     | Real AI via backend + LLM (structured output)     | ⬜ Planned        |
-| 3     | Prompt intelligence (health, modes, explanations) | ⬜ Planned        |
+| 1     | Extension prototype (mock improve → replace)      | ✅ Done           |
+| 2     | Real AI via backend + LLM (structured output)     | 🚧 In progress    |
+| 3     | Prompt intelligence (health, modes, explanations) | 🚧 In progress    |
 | 4     | Platform expansion (Claude, Gemini, Perplexity)   | ⬜ Future         |
 | 5     | Dashboard (history, analytics, settings)          | ⬜ Future         |
 
@@ -227,30 +228,48 @@ prompter/
 ### Requirements
 
 - Chromium-based browser (Chrome / Edge / Brave)
-- Node.js 18+ (for the TypeScript build, coming in Phase 1)
+- Node.js 18+ (TypeScript build + backend)
 - ChatGPT account (target platform)
+- Groq API key for Phase 2 (`backend/.env`)
+
+### Running the backend (Phase 2)
+
+```bash
+# 1. Get a free Groq API key: https://console.groq.com/keys
+# 2. Create the secret env file (gitignored):
+Copy-Item backend/.env.example backend/.env   # Windows
+cp backend/.env.example backend/.env          # Mac/Linux
+
+# 3. Edit backend/.env → paste your GROQ_API_KEY
+
+# 4. Start the server (default http://localhost:3001):
+npm run server
+```
+
+The extension talks to this server. If it isn't running, the extension quietly falls
+back to the built-in local mock analyzer (Rule 11 — stay functional).
 
 ### Running the extension
 
 ```bash
-# Phase 1 will introduce the build tooling:
 npm install
 npm run build
 
 # Then load the extension:
 #   chrome://extensions → enable Developer mode → Load unpacked → select /extension
+# Change the BACKEND_URL in extension/content/content.ts if you run the server elsewhere.
 ```
 
 ### Acceptance criteria (V1)
 
 - [x] Valid Manifest V3 (extension identity) — `manifest.json`
-- [ ] Content script loads on ChatGPT
-- [ ] Prompt input detected reliably
-- [ ] "✦ Improve" control appears without breaking ChatGPT
-- [ ] Current prompt can be read & sent to the analysis layer
-- [ ] Improved prompt arrives back & is displayed
-- [ ] **Replace** correctly updates ChatGPT's input
-- [ ] User can dismiss Prompter; typing is never interrupted
+- [x] Content script loads on ChatGPT
+- [x] Prompt input detected reliably
+- [x] "✦ Improve" control appears without breaking ChatGPT
+- [x] Current prompt can be read & sent to the analysis layer
+- [x] Improved prompt arrives back & is displayed
+- [x] **Replace** correctly updates ChatGPT's input
+- [x] User can dismiss Prompter; typing is never interrupted
 
 ---
 

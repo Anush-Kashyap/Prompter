@@ -1,36 +1,60 @@
-import { readCurrentPrompt, detectPrompt } from "../content/detector";
-import { injectUI, showAnalysisPanel } from "../content/ui-analysis-panel";
+// ChatGPT Platform Adapter
+// Responsibilities: detect input, read prompt, inject UI, replace prompt
 
-// Message listener for analysis requests
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "analyzePrompt") {
-    const prompt = readCurrentPrompt();
-    if (!prompt.trim()) {
-      sendResponse({ success: false, error: "No prompt found" });
-      return;
-    }
+export function findPromptInput(): HTMLElement | null {
+  // ChatGPT uses a ProseMirror contenteditable div (primary)
+  const proseMirror = document.querySelector('div#prompt-textarea.ProseMirror[contenteditable="true"]');
+  if (proseMirror) return proseMirror as HTMLElement;
 
-    const analysis = detectPrompt(prompt);
-    sendResponse({ success: true, analysis });
-  } else if (message.action === "showPanel") {
-    const analysis = message.analysis;
-    if (analysis) {
-      showAnalysisPanel(analysis);
-    }
-    sendResponse({ success: true });
+  // Fallback: hidden textarea (sometimes used)
+  const fallback = document.querySelector('textarea#wcDTda_fallbackTextarea');
+  if (fallback) return fallback as HTMLTextAreaElement;
+
+  // Generic fallback
+  const anyEditable = document.querySelector('div[contenteditable="true"][data-id="root"], textarea[placeholder*="Ask anything"]');
+  if (anyEditable) return anyEditable as HTMLElement;
+
+  return null;
+}
+
+export function readCurrentPrompt(): string {
+  const input = findPromptInput();
+  if (!input) return "";
+
+  if (input instanceof HTMLTextAreaElement) {
+    return input.value;
   }
+  // ProseMirror contenteditable
+  return input.textContent || input.innerText || "";
+}
+
+export function writePrompt(text: string): boolean {
+  const input = findPromptInput();
+  if (!input) return false;
+
+  if (input instanceof HTMLTextAreaElement) {
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  // ProseMirror: set textContent and fire input event
+  input.textContent = text;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  // Also try innerText for ProseMirror
+  input.innerText = text;
   return true;
-});
+}
 
-// Auto-detect when page loads
-setTimeout(() => {
-  const prompt = readCurrentPrompt();
-  if (prompt.trim()) {
-    chrome.runtime.sendMessage({ action: "analyzePrompt" }, response => {
-      if (response.success && response.analysis) {
-        showAnalysisPanel(response.analysis);
-      }
-    });
-  }
-}, 1000);
+export function getInputPosition(): { top: number; left: number; width: number } | null {
+  const input = findPromptInput();
+  if (!input) return null;
 
+  const rect = input.getBoundingClientRect();
+  return {
+    top: rect.top + window.scrollY,
+    left: rect.left + window.scrollX,
+    width: rect.width
+  };
+}

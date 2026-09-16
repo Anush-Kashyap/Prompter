@@ -19,6 +19,10 @@ out/
 # regenerate with the build step instead of committing)
 extension/**/*.js
 
+# Bundled CSS + sourcemaps emitted by esbuild (also build output)
+extension/**/*.css
+extension/**/*.map
+
 # ── Logs ────────────────────────────────────────────────────────────
 *.log
 npm-debug.log*
@@ -26,6 +30,8 @@ npm-debug.log*
 # ── Environment & secrets ───────────────────────────────────────────
 .env
 .env.*
+!.env.example
+!backend/.env.example
 *.pem
 
 # ── OS cruft ────────────────────────────────────────────────────────

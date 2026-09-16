@@ -1,0 +1,20 @@
+{
+  "name": "prompter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Prompt Intelligence Layer - browser extension",
+  "scripts": {
+    "build": "esbuild extension/**/*.ts --bundle --outdir=extension --platform=browser --format=iife --target=es2020 --sourcemap",
+    "watch": "npm run build -- --watch",
+    "clean": "del-cli extension/**/*.js extension/**/*.js.map",
+    "server": "node backend/server.mjs"
+  },
+  "devDependencies": {
+    "del-cli": "^5.1.0",
+    "esbuild": "^0.23.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
