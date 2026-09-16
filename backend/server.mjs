@@ -25,11 +25,11 @@ app.use((req, res, next) => {
 
 const MODE_GUIDANCE = {
   light:
-    "Mode: LIGHT. Only fix critical missing context that would prevent the request from being understood. Keep changes minimal and the prompt close to the original. List only critical issues.",
+    "Mode: LIGHT. Structure the prompt with the XML-style tags but change as little content as possible. Use at most <role>, <task>, and <output_format> (only when the user hinted at a format). Do not add new requirements or context beyond fixing what is critical. List only critical issues.",
   balanced:
-    "Mode: BALANCED. Add useful context where it is safe to assume it. Stay proportional to the request and keep the prompt concise. List critical and useful issues.",
+    "Mode: BALANCED. Structure the prompt with the XML-style tags. Derive a fitting <role> persona from the intent, write a precise <task>, and add <context>, <instructions>, and <output_format> only where they add real value. Keep the total output proportional and concise. List critical and useful issues.",
   deep:
-    "Mode: DEEP. Be comprehensive: include constraints, examples, expected output format and edge cases when they add real value. List critical, useful and optional issues."
+    "Mode: DEEP. Use the full tag set: <role>, <task>, <context>, <instructions>, <examples>, and <output_format>. Add constraints, edge cases, and a clarifying example when they add real value. Be comprehensive but never invent facts the user didn't imply. List critical, useful and optional issues."
 };
 
 function buildSystemPrompt(mode) {
@@ -45,10 +45,26 @@ function buildSystemPrompt(mode) {
     '- If the prompt is already clear, make only tiny clarifications and list few or no issues.',
     '- Never refuse. If the user\'s prompt touches something problematic, do not apologize or refuse: report it as a critical issue instead and still return the JSON exactly as specified.',
     guidance,
+    'IMPORTANT — improved_prompt construction:',
+    'The improved_prompt must be a standalone, ready-to-paste prompt written in a structured,',
+    'Anthropic-style format. It is built from XML-style tags. Tag set, in order:',
+    '<role>      The persona the AI should act as. Begin the content with "You are...". Omit if a persona adds nothing.',
+    '<task>      The core task, stated precisely. Always include.',
+    '<context>   Background, audience, constraints and safe assumptions. Omit if nothing is needed.',
+    '<instructions> Ordered steps or strict requirements the AI must follow. Omit if the task is trivial.',
+    '<examples>  One concise input/output example when it clearly helps. Omit otherwise.',
+    '<output_format> What the final answer must look like (plain text, code block, JSON schema, bullets, table, length). Omit for trivial outputs.',
+    'Rules for the tags:',
+    "- Start with <role>, then <task>, then <context>, <instructions>, <examples>, <output_format>.",
+    "- Each section spans one or more lines: the opening tag on its own line, the content, then the closing tag on its own line.",
+    "- Derive the persona from the prompt's intent; never invent expertise the user didn't imply.",
+    '- Do not add filler sections — drop tags that add no value. Keep the prompt proportional to the original.',
+    '- Never wrap the structured prompt in backticks, triple backticks, quotes or JSON escaping.',
     'Respond with a single JSON object, no prose, using EXACTLY this shape:',
     '{',
     '  "score": <integer 0-100 overall prompt quality>,',
     '  "intent": "<short lowercase intent id, e.g. coding|website_design|learning|brainstorming|writing|other>",',
+    '  "output_format": "<detected format: code|json|markdown|bullets|table|other>",',
     '  "confidence": <float 0-1 how sure you are about the intent>,',
     '  "issues": [',
     '    { "type": "missing_context|missing_output|ambiguous|constraint",',
@@ -56,7 +72,7 @@ function buildSystemPrompt(mode) {
     '      "message": "<one sentence, user-facing>" }',
     '  ],',
     '  "assumptions": ["<safe assumptions you made>"],',
-    '  "improved_prompt": "<the improved prompt, plain text>",',
+    '  "improved_prompt": "<the improved prompt: a ready-to-paste prompt built from the XML-style tags above. Keep its newlines. Do not escape or wrap it.>",',
     '  "explanation": "<2-3 sentences: what you changed and why>"',
     '}'
   ].join("\n");
@@ -170,6 +186,7 @@ function normalize(raw) {
   return {
     score: clampInt(parsed.score, 0, 100, 70),
     intent: typeof parsed.intent === "string" ? parsed.intent : "other",
+    output_format: typeof parsed.output_format === "string" ? parsed.output_format : "other",
     confidence: clampNumber(parsed.confidence, 0, 1, 0.8),
     issues,
     assumptions: Array.isArray(parsed.assumptions)

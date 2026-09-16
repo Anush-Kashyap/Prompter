@@ -1,20 +1,23 @@
 // Prompter Content Script - Main Entry Point
 import "../ui/styles.css";
 import { mockAnalyze } from "./detector";
-import { injectUI } from "./injector";
-import { showAnalysisPanel, showAnalysisError, closeAnalysisPanel } from "../ui/analysis-panel";
+import { injectUI, showOnboardingTip } from "./injector";
+import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel } from "../ui/analysis-panel";
 import { readCurrentPrompt, writePrompt } from "../adapters/chatgpt";
 import type { AnalysisResult } from "../types";
 
 export type RewriteMode = "light" | "balanced" | "deep";
 
 const COOLDOWN_MS = 1500;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_MAX = 50;
 
 let improveButton: HTMLButtonElement | null = null;
 let currentAnalysis: AnalysisResult | null = null;
 let currentMode: RewriteMode = "balanced";
 let lastPrompt = "";
 let lastAnalyzeAt = 0;
+let modeChanging = false;
 
 function init(): void {
   // Check if we're on ChatGPT
@@ -33,7 +36,25 @@ function init(): void {
     improveButton = btn;
     improveButton.addEventListener("click", handleImproveClick);
     console.log("[Prompter] Initialized on ChatGPT");
+    maybeShowOnboarding(btn);
   });
+
+  // Keyboard command routed from the service worker (Ctrl/Cmd+Shift+Y)
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.type === "improve-now") {
+      handleImproveClick();
+    }
+  });
+}
+
+async function maybeShowOnboarding(btn: HTMLButtonElement): Promise<void> {
+  if (!chrome.storage) return;
+  const stored = await new Promise<{ prompterSeenTip?: boolean }>((resolve) => {
+    chrome.storage.local.get({ prompterSeenTip: false }, resolve);
+  });
+  if (stored && stored.prompterSeenTip) return;
+  chrome.storage.local.set({ prompterSeenTip: true });
+  showOnboardingTip(btn, { shortcut: /Mac|iPhone|iPad/i.test(navigator.platform) ? "Cmd" : "Ctrl" });
 }
 
 async function handleImproveClick(): Promise<void> {
@@ -55,7 +76,8 @@ async function handleImproveClick(): Promise<void> {
     }
     lastPrompt = prompt;
 
-    // Analyze via backend LLM; fall back to local mock if backend is down (spec Rule 11)
+    // Show a waiting panel immediately so the user knows analysis is running
+    showAnalysisLoading();
     const analysis = await analyzePrompt(prompt, currentMode);
     currentAnalysis = analysis;
 
@@ -75,6 +97,9 @@ async function handleImproveClick(): Promise<void> {
 }
 
 async function handleModeChange(mode: RewriteMode): Promise<void> {
+  if (modeChanging) return;
+  modeChanging = true;
+
   currentMode = mode;
   try {
     await chrome.storage.local.set({ prompterMode: mode });
@@ -82,11 +107,13 @@ async function handleModeChange(mode: RewriteMode): Promise<void> {
     // storage is optional; analysis still works
   }
 
-  if (!lastPrompt || !improveButton) return;
+  if (!lastPrompt || !improveButton) {
+    modeChanging = false;
+    return;
+  }
 
-  // Re-run analysis with the new mode and refresh the panel in place
-  improveButton.classList.add("prompter-loading");
-  improveButton.disabled = true;
+  // Keep the panel open but swap in a spinner while the new mode is analyzed
+  showAnalysisLoading(`Re-analyzing in ${mode} mode…`);
   try {
     const analysis = await analyzePrompt(lastPrompt, currentMode);
     currentAnalysis = analysis;
@@ -98,14 +125,21 @@ async function handleModeChange(mode: RewriteMode): Promise<void> {
     console.error("[Prompter] Re-analysis failed:", err);
     showAnalysisError("Failed to re-analyze with this mode.");
   } finally {
-    if (improveButton) {
-      improveButton.classList.remove("prompter-loading");
-      improveButton.disabled = false;
-    }
+    modeChanging = false;
   }
 }
 
 async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<AnalysisResult> {
+  const key = await promptHash(prompt, mode);
+
+  // 1) Cache hit: return memoized analysis without hitting the backend
+  const cached = await cachedAnalysis(key);
+  if (cached) {
+    console.log("[Prompter] Using cached analysis");
+    return { ...cached, cached: true };
+  }
+
+  // 2) Miss: call the backend via the service worker
   try {
     const response = await chrome.runtime.sendMessage({ type: "analyze", prompt, mode });
 
@@ -117,17 +151,81 @@ async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<Analysi
     if (!json || typeof json !== "object" || typeof (json as AnalysisResult).improved_prompt !== "string") {
       throw new Error("Backend returned an unexpected shape");
     }
-    return json as AnalysisResult;
+
+    const analysis = json as AnalysisResult;
+    await storeAnalysis(key, analysis);
+    return analysis;
   } catch (err) {
     console.warn("[Prompter] Backend unavailable, using local mock:", err);
-    return mockAnalyze(prompt);
+    const analysis = mockAnalyze(prompt);
+    await storeAnalysis(key, analysis);
+    return analysis;
   }
 }
 
-function handleReplace(): void {
+interface CacheEntry {
+  analysis: AnalysisResult;
+  ts: number;
+}
+
+interface CacheMap {
+  [key: string]: CacheEntry;
+}
+
+async function promptHash(prompt: string, mode: string): Promise<string> {
+  try {
+    const data = new TextEncoder().encode(`${mode}:${prompt}`);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest)).slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // Fallback: stable-ish hash if SubtleCrypto is unavailable
+    let h = 5381;
+    const s = `${mode}:${prompt}`;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h.toString(16);
+  }
+}
+
+async function cachedAnalysis(key: string): Promise<AnalysisResult | null> {
+  if (!chrome.storage) return null;
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ prompterCache: {} }, (stored) => {
+      const cache: CacheMap = (stored && stored.prompterCache) || {};
+      const entry = cache[key];
+      if (!entry || !entry.analysis || Date.now() - entry.ts > CACHE_TTL_MS) {
+        return resolve(null);
+      }
+      resolve(entry.analysis);
+    });
+  });
+}
+
+async function storeAnalysis(key: string, analysis: AnalysisResult): Promise<void> {
+  if (!chrome.storage) return;
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ prompterCache: {} }, (stored) => {
+      const cache: CacheMap = (stored && stored.prompterCache) || {};
+      cache[key] = { analysis, ts: Date.now() };
+
+      // LRU-ish eviction: drop oldest entries beyond CACHE_MAX
+      const keys = Object.keys(cache);
+      if (keys.length > CACHE_MAX) {
+        keys
+          .slice()
+          .sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0))
+          .slice(0, keys.length - CACHE_MAX)
+          .forEach((k) => delete cache[k]);
+      }
+
+      chrome.storage.local.set({ prompterCache: cache }, resolve);
+    });
+  });
+}
+
+function handleReplace(edited?: string): void {
   if (!currentAnalysis) return;
 
-  const improvedPrompt = currentAnalysis.improved_prompt || readCurrentPrompt();
+  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || readCurrentPrompt();
   const success = writePrompt(improvedPrompt);
   if (success) {
     console.log("[Prompter] Prompt replaced successfully");
@@ -137,9 +235,9 @@ function handleReplace(): void {
   }
 }
 
-function handleCopy(): void {
+function handleCopy(edited?: string): void {
   if (!currentAnalysis) return;
-  const improvedPrompt = currentAnalysis.improved_prompt || readCurrentPrompt();
+  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || readCurrentPrompt();
   navigator.clipboard.writeText(improvedPrompt).then(() => {
     console.log("[Prompter] Copied to clipboard");
   });

@@ -44,6 +44,7 @@ export function mockAnalyze(prompt: string): AnalysisResult {
   return {
     score,
     intent,
+    output_format: detectOutputFormat(lower),
     confidence,
     issues,
     assumptions: [],
@@ -53,18 +54,86 @@ export function mockAnalyze(prompt: string): AnalysisResult {
   };
 }
 
+function detectOutputFormat(lower: string): string {
+  if (/(json|javascript object|return.*object|api response)/.test(lower)) return "json";
+  if (/(code|function|script|class|component|implementation)/.test(lower)) return "code";
+  if (/(markdown|readme|\.md\b|fenced)/.test(lower)) return "markdown";
+  if (/(bullet|list\b|number them|bullet point)/.test(lower)) return "bullets";
+  if (/(table|csv|spreadsheet|columns)/.test(lower)) return "table";
+  return "other";
+}
+
 function mockImprovedPrompt(intent: string, prompt: string): string {
   if (intent === "website_design") {
-    return "Create a modern website for Tathva, a college technology festival. Design it for college students and prospective participants. Use a futuristic, technology-focused visual direction and include sections for events, schedule, sponsors, registration and contact information.";
+    return [
+      "<role>You are an expert front-end developer and designer specializing in modern, conversion-focused college and event websites.</role>",
+      "<task>Design and build a modern website for Tathva, a college technology festival.</task>",
+      "<context>The target audience is college students and prospective participants. Visual direction should be futuristic and technology-focused. The site must feel alive, energetic and responsive on all devices.</context>",
+      "<instructions>",
+      "1. Define the information architecture: hero section, events, schedule, sponsors, registration and contact.",
+      "2. Recommend a layout, color palette and typography.",
+      "3. Provide implementation guidance using a lightweight framework or plain HTML/CSS/JS.",
+      "4. Optimize for mobile and fast page load.",
+      "</instructions>",
+      "<examples>Hero section: festival name, tagline, countdown timer, date and a prominent 'Register Now' call-to-action.</examples>",
+      "<output_format>Provide the design plan first, then the implementation code in a single HTML file with inline CSS/JS.</output_format>",
+    ].join("\n");
   }
+
   if (intent === "coding") {
-    return "Write a Python script that solves the problem. Include error handling, type hints, and a brief explanation of how to run it.";
+    return [
+      "<role>You are a senior software engineer and code reviewer.</role>",
+      "<task>Write a Python script that solves the stated problem.</task>",
+      "<context>Target level: intermediate programmer. Assume the Python standard library only unless otherwise stated.</context>",
+      "<instructions>",
+      "1. Clarify inputs, outputs and edge cases up front.",
+      "2. Include proper error handling and type hints.",
+      "3. Write clean, well-commented code.",
+      "4. End with a one-paragraph explanation of how to run it.",
+      "</instructions>",
+      "<output_format>Return the complete script in a single fenced code block, followed by the explanation.</output_format>",
+    ].join("\n");
   }
+
   if (intent === "learning") {
-    return "Explain this concept to a beginner. Start with the intuition, then show a simple example, then explain how it works under the hood.";
+    return [
+      "<role>You are an experienced educator who explains complex topics in plain, intuitive language.</role>",
+      "<task>Explain the concept clearly, from intuition to implementation.</task>",
+      "<context>Audience is a learner with basic programming knowledge. Depth should go beyond surface-level, but start accessible.</context>",
+      "<instructions>",
+      "1. Start with the core intuition — why the concept exists.",
+      "2. Provide a minimal concrete example.",
+      "3. Explain how it works under the hood.",
+      "4. End with one common pitfall or edge case.",
+      "</instructions>",
+      "<output_format>Use clear markdown headings and short paragraphs. Include one code block with a simple example.</output_format>",
+    ].join("\n");
   }
+
   if (intent === "brainstorming") {
-    return `${prompt.trim()}\n\nProvide 5–8 varied ideas and note which ones are most practical, plus any constraints or evaluation criteria you'd apply.`;
+    return [
+      "<role>You are a creative strategist who generates structured, evaluable ideas.</role>",
+      `<task>Generate a diverse set of ideas around: ${prompt.trim()}.</task>`,
+      "<context>Provide 6-10 varied ideas. Note which are practical, which are ambitious, and under what constraints each would succeed.</context>",
+      "<instructions>",
+      "1. Vary the approach — some technical, some unconventional.",
+      "2. For each idea, give a one-line 'why it works' note.",
+      "3. Rank them from most practical to most experimental.",
+      "4. If any constraint is missing, flag it rather than assume.",
+      "</instructions>",
+      "<output_format>Bulleted list grouped by theme, with a short ranking at the end.</output_format>",
+    ].join("\n");
   }
-  return `${prompt.trim()}\n\nPlease include any relevant context, constraints and desired output format.`;
+
+  return [
+    "<role>You are an expert assistant who produces clear, high-quality answers.</role>",
+    `<task>${prompt.trim()}</task>`,
+    "<context>Provide only what is needed; avoid generic filler. If critical information is missing, flag it in your response rather than guess.</context>",
+    "<instructions>",
+    "1. Address the request directly.",
+      "2. Flag any missing information instead of guessing.",
+      "3. Keep the response concise and well-structured.",
+    "</instructions>",
+    "<output_format>Clear plain text with short paragraphs; use lists or code blocks where they genuinely help.</output_format>",
+  ].join("\n");
 }

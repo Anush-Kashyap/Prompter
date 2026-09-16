@@ -9,6 +9,20 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("[Prompter] Extension installed");
 });
 
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "improve-prompt") return;
+
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab || tab.id == null) return;
+    chrome.tabs
+      .sendMessage(tab.id, { type: "improve-now" })
+      .catch(() => {
+        // No content script on this page — ignore.
+      });
+  });
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "analyze") {
     handleAnalyze(message.prompt, message.mode)
