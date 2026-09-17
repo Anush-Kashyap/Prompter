@@ -1,11 +1,14 @@
 // Prompter Per-Chat Context Store
-// Tracks context per ChatGPT conversation so each chat has its own memory:
-//   - Different chats => different ids (from the /c/<uuid> URL)
+// Tracks context per conversation so each chat has its own memory:
+//   - Different chats => different ids (from the platform URL)
 //   - Opening a chat again reloads its turns
 //   - A brand-new chat starts with empty context
-// Drafts (before the first message is sent, the URL has no /c/<uuid>) get a
+// Drafts (before the first message is sent, the URL has no chat id) get a
 // temporary id that is migrated to the real chat id once the chat exists.
 // Data lives in chrome.storage.local so it survives browser restarts.
+//
+// The chat-id format is platform-specific, so the content script injects an
+// extractor (setChatIdExtractor) from the active PlatformAdapter.
 
 import type { AnalysisResult, ImageRef, SessionTurn } from "../types";
 
@@ -22,9 +25,24 @@ interface ChatMeta {
 }
 
 type ChatMap = Record<string, SessionTurn[]>;
+type ChatIdExtractor = () => string | null;
 
-// ChatGPT conversation ids appear in the URL as /c/<uuid>.
+let chatIdExtractor: ChatIdExtractor | null = null;
+
+// The content script sets this from the active platform adapter.
+export function setChatIdExtractor(fn: ChatIdExtractor | null): void {
+  chatIdExtractor = fn;
+}
+
+// Fallback to ChatGPT's /c/<uuid> shape when no adapter extractor is installed.
 export function getChatIdFromUrl(): string | null {
+  if (chatIdExtractor) {
+    try {
+      return chatIdExtractor();
+    } catch {
+      // ignore and use fallback
+    }
+  }
   const m = window.location.pathname.match(/(?:^|\/)c\/([a-f0-9-]{8,36})/i);
   return m ? m[1] : null;
 }

@@ -14,8 +14,8 @@ Your intent, unchanged. Your AI, suddenly smarter.
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-2ea44f.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
-[![Target](https://img.shields.io/badge/Target-ChatGPT%20Web-10a37f.svg)](https://chatgpt.com/)
-[![Version](https://img.shields.io/badge/Version-0.8.0-informational.svg)](DEV_NOTES.md)
+[![Target](https://img.shields.io/badge/Target-ChatGPT%20%7C%20Claude%20%7C%20Gemini-10a37f.svg)](#-supported-platforms)
+[![Version](https://img.shields.io/badge/Version-0.9.0-informational.svg)](DEV_NOTES.md)
 
 </div>
 
@@ -38,7 +38,7 @@ flowchart LR
     F -- No --> H[😌 Keep typing, nobody bothers you]
 ```
 
-No copy-paste dancing between ChatGPT and a "prompt enhancer" website. Just a small
+No copy-paste dancing between your AI chat and a "prompt enhancer" website. Just a small
 **✦ Improve** control sitting quietly in the bottom-right corner of your screen, ready
 when you want it.
 
@@ -91,9 +91,10 @@ just rewrite words.
 - 🔍 **Intent detection** — understands *what* you're trying to accomplish (coding,
   learning, writing, design, brainstorming…) before suggesting anything.
 - 🧭 **Context analysis** — knows what a good prompt needs and spots what's missing.
-- 🧠 **Per-chat memory** — session context is scoped to each ChatGPT conversation.
-  Reopening an old chat restores its memory; a new chat starts clean. Analysis is cached
-  (with a key that includes the chat id, so results never leak between conversations).
+- 🧠 **Per-chat memory** — session context is scoped to each conversation, on every
+  supported platform. Reopening an old chat restores its memory; a new chat starts clean.
+  Analysis is cached (with a key that includes the chat id, so results never leak between
+  conversations).
 - 🖼️ **Image awareness** — attached images are detected and referenced in the improved
   prompt; visual context from earlier turns carries forward.
 - 👤 **Human professional roles** — every improved prompt opens with a real expert persona
@@ -125,7 +126,30 @@ just rewrite words.
   sheet.
 - 🌗 **Dark mode** — a monochrome theme that follows your system preference, plus a
   `prefers-reduced-motion` friendly UI.
-- 🔌 **Platform adapters** — ChatGPT today; Claude, Gemini & more to come.
+- 🔌 **Platform adapters** — runs on ChatGPT, Claude and Gemini today; each site's DOM and
+  URL quirks live in their own adapter, so new platforms are additive (see below).
+
+---
+
+## 🌐 Supported Platforms
+
+Prompter plugs into a platform through a small **adapter** — one file that knows how to
+find, read and replace that site's composer, and how its conversations are identified in
+the URL. Everything else (analysis, memory, UI) is shared and platform-independent.
+
+| Platform    | Site                                  | Composer                    | Chat id       |
+|-------------|---------------------------------------|-----------------------------|---------------|
+| **ChatGPT** | `chatgpt.com`, `chat.openai.com`      | ProseMirror contenteditable | `/c/<uuid>`   |
+| **Claude**  | `claude.ai`                           | ProseMirror contenteditable | `/chat/<uuid>`|
+| **Gemini**  | `gemini.google.com` (legacy `bard.google.com`) | Quill `div.ql-editor` | `/app/<uuid>` |
+
+> Selectors are written defensively (multiple fallbacks, attribute-based rather than hashed
+> class names), since these sites ship new front-ends often. If a site changes and Prompter
+> can't find the box, the fix is contained to that platform's adapter file.
+
+Adding a platform means implementing the `PlatformAdapter` interface in
+`extension/adapters/`, registering it in `extension/adapters/index.ts`, and adding the host
+to `manifest.json` (`content_scripts.matches`) and the backend `CORS_ALLOWED` default.
 
 ---
 
@@ -137,13 +161,13 @@ intelligence stays *platform-independent*.
 ```mermaid
 flowchart TB
     subgraph Browser["🌐 Chromium Browser"]
-        subgraph Page["AI Website (ChatGPT)"]
+        subgraph Page["AI Website (ChatGPT / Claude / Gemini)"]
             INPUT["📝 Prompt Input Box"]
             UI2["✦ Improve Button + Panel"]
         end
         subgraph EXT["Prompter Extension"]
             CS["Content Script"]
-            ADAPTER["Platform Adapter (chatgpt.ts)"]
+            ADAPTER["Platform Adapters (chatgpt / gemini / claude)"]
             UILAYER["Prompter UI"]
             SW["Background Service Worker"]
         end
@@ -195,7 +219,11 @@ prompter/
 │   │   ├── analysis-panel.ts   # Panel, loading/error, edit mode, toast, help
 │   │   └── styles.css          # Monochrome theme (light + dark)
 │   ├── adapters/               # Platform-specific code
-│   │   └── chatgpt.ts          # ChatGPT adapter (read/write prompt, images)
+│   │   ├── index.ts            # PlatformAdapter interface + host registry
+│   │   ├── shared.ts           # Editable read/write + generic image scanner
+│   │   ├── chatgpt.ts          # ChatGPT adapter
+│   │   ├── claude.ts           # Claude adapter
+│   │   └── gemini.ts           # Gemini adapter
 │   ├── background/             # MV3 service worker
 │   │   └── service-worker.ts   # /analyze proxy + shortcuts relay
 │   ├── popup/                  # Toolbar popup
@@ -220,8 +248,8 @@ prompter/
 | 1     | Extension prototype (mock improve → replace)      | ✅ Done           |
 | 2     | Real AI via backend + LLM (structured output)     | ✅ Done           |
 | 3     | Prompt intelligence (health, modes, explanations) | ✅ Done           |
-| 4     | Platform expansion (Claude, Gemini, Perplexity)   | ⬜ Future         |
-| 5     | Dashboard (history, analytics, settings)          | ⬜ Future         |
+| 4     | Platform expansion (Claude, Gemini adapters)      | ✅ Done           |
+| 5     | More platforms (Perplexity, …) + dashboard         | ⬜ Future         |
 
 ---
 
@@ -231,7 +259,7 @@ prompter/
 
 - Chromium-based browser (Chrome / Edge / Brave)
 - Node.js 18+ (TypeScript build + backend)
-- ChatGPT account (target platform)
+- An account on any supported platform (ChatGPT / Claude / Gemini)
 - Groq API key for real analysis (`backend/.env`)
 
 ### Running the backend
@@ -263,7 +291,7 @@ stay functional, Rule 11.
 | `RATE_LIMIT_MAX`         | `20`                  | Max `/analyze` requests per window per IP     |
 | `RATE_LIMIT_WINDOW_MS`   | `60000`               | Rate-limit window                             |
 | `PROMPT_MAX_CHARS`       | `8000`                | Max accepted prompt length                    |
-| `CORS_ALLOWED`           | `https://chatgpt.com` | Comma-separated allowed origins (+ `chrome-extension://` always allowed) |
+| `CORS_ALLOWED`           | `https://chatgpt.com,https://gemini.google.com,https://claude.ai` | Comma-separated allowed origins (+ `chrome-extension://` always allowed) |
 
 ### Running the extension
 
@@ -282,7 +310,8 @@ extension from `chrome://extensions`. The backend listens on port `3001` by defa
 ### Manifest highlights
 
 - MV3 service worker handles analyses and relays the `improve-prompt` command.
-- Content script runs on `https://chatgpt.com/*` only.
+- Content script runs on the supported sites: `chatgpt.com`, `chat.openai.com`,
+  `gemini.google.com`, `bard.google.com`, `claude.ai`.
 - Permissions are minimal: `storage`, `activeTab`, `scripting`.
 - Shortcut: `Ctrl`/`Cmd`+`Shift`+`Y`.
 

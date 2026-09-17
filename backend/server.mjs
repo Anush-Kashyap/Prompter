@@ -10,7 +10,7 @@ dotenv.config({ path: join(__dirname, ".env") });
 
 const PORT = Number(process.env.PORT) || 3001;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const STARTED_AT = Date.now();
 
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -21,9 +21,12 @@ const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 20; // 20 requests 
 const PROMPT_MAX_CHARS = Number(process.env.PROMPT_MAX_CHARS) || 8000;
 
 // Allowed browsers that may call this backend. The extension runs inside
-// chatgpt.com and backgrounds reach it with a chrome-extension:// origin.
+// supported chat sites and backgrounds reach it with a chrome-extension:// origin.
 const CORS_ALLOWED =
-  (process.env.CORS_ALLOWED || "https://chatgpt.com").split(",").map((s) => s.trim()).filter(Boolean);
+  (process.env.CORS_ALLOWED || "https://chatgpt.com,https://gemini.google.com,https://claude.ai")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 const isAllowedOrigin = (origin) =>
   !!origin &&
   (CORS_ALLOWED.includes(origin) || origin.startsWith("chrome-extension://"));

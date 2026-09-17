@@ -3,8 +3,8 @@ import "../ui/styles.css";
 import { mockAnalyze } from "./detector";
 import { injectUI, showOnboardingTip, clearFabFirstRun } from "./injector";
 import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel, showToast, showHelpOverlay } from "../ui/analysis-panel";
-import { readCurrentPrompt, writePrompt, getComposerImages } from "../adapters/chatgpt";
-import { addTurn, getRecentTurns, syncActiveChat, resetDraftForNewChat } from "./context-store";
+import { getAdapterForHost, type PlatformAdapter } from "../adapters/index";
+import { addTurn, getRecentTurns, syncActiveChat, resetDraftForNewChat, setChatIdExtractor } from "./context-store";
 import type { AnalysisResult, ImageRef, SessionTurn, AnalysisContext } from "../types";
 
 export type RewriteMode = "light" | "balanced" | "deep";
@@ -19,10 +19,14 @@ let currentMode: RewriteMode = "balanced";
 let lastPrompt = "";
 let lastAnalyzeAt = 0;
 let modeChanging = false;
+let platform: PlatformAdapter | null = null;
 
 function init(): void {
-  // Check if we're on ChatGPT
-  if (!window.location.hostname.includes("chatgpt.com")) return;
+  // Resolve the platform adapter for this site; bail on unsupported pages.
+  const resolved = getAdapterForHost(window.location.hostname);
+  if (!resolved) return;
+  platform = resolved;
+  setChatIdExtractor(() => platform?.getChatIdFromUrl() ?? null);
 
   // Restore the last-used rewrite mode (default Balanced)
   if (chrome.storage) {
@@ -34,7 +38,7 @@ function init(): void {
   // Identify the active chat and load its context
   syncActiveChat().catch(() => {});
 
-  // Watch for SPA navigation (ChatGPT is a single-page app):
+  // Watch for SPA navigation (all supported chat sites are single-page apps):
   // patch pushState/replaceState so we detect chat switches without reloads.
   const patchNav = (fn: "pushState" | "replaceState") => {
     const orig = history[fn];
@@ -49,12 +53,16 @@ function init(): void {
   window.addEventListener("popstate", () => syncActiveChat().catch(() => {}));
 
   // Reset draft context when the user clicks "New chat"
+  const newChatSelectors = [
+    '[data-testid="new-chat-button"]',
+    'a[aria-label*="New chat" i]',
+    'a[aria-label*="Start new chat" i]',
+    ...(platform?.getNewChatSelectors() || [])
+  ];
   document.addEventListener(
     "click",
     (e) => {
-      const t = (e.target as HTMLElement).closest(
-        '[data-testid="new-chat-button"], a[aria-label*="New chat" i], a[aria-label*="Start new chat" i]'
-      );
+      const t = (e.target as HTMLElement).closest(newChatSelectors.join(","));
       if (t) resetDraftForNewChat().catch(() => {});
     },
     true
@@ -65,7 +73,7 @@ function init(): void {
     if (!btn) return;
     improveButton = btn;
     improveButton.addEventListener("click", handleImproveClick);
-    console.log("[Prompter] Initialized on ChatGPT");
+    console.log(`[Prompter] Initialized on ${platform?.name || "unknown platform"}`);
     clearFabFirstRun();
     maybeShowOnboarding(btn);
   });
@@ -133,10 +141,10 @@ async function handleImproveClick(): Promise<void> {
   improveButton.disabled = true;
 
   try {
-    // Read current prompt from ChatGPT input
-    const prompt = readCurrentPrompt();
+    // Read current prompt from the platform composer
+    const prompt = platform?.readCurrentPrompt() ?? "";
     if (!prompt.trim()) {
-      showAnalysisError("No prompt found in input. Type a prompt in ChatGPT first.");
+      showAnalysisError("No prompt found. Type a prompt into the chat box first.");
       return;
     }
     lastPrompt = prompt;
@@ -200,7 +208,7 @@ async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<Analysi
 
   // Gather session context and attached images
   const recentTurns = await getRecentTurns(3);
-  const images = getComposerImages();
+  const images = platform?.getComposerImages() ?? [];
 
   // Cache key includes chat id + prompt + mode + image hashes, so cached
   // results never leak between different conversations.
@@ -316,8 +324,8 @@ async function storeAnalysis(key: string, analysis: AnalysisResult): Promise<voi
 function handleReplace(edited?: string): void {
   if (!currentAnalysis) return;
 
-  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || readCurrentPrompt();
-  const success = writePrompt(improvedPrompt);
+  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || platform?.readCurrentPrompt() || "";
+  const success = platform?.writePrompt(improvedPrompt) ?? false;
   if (success) {
     console.log("[Prompter] Prompt replaced successfully");
     showToast("Replaced");
@@ -329,7 +337,7 @@ function handleReplace(edited?: string): void {
 
 function handleCopy(edited?: string): void {
   if (!currentAnalysis) return;
-  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || readCurrentPrompt();
+  const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || platform?.readCurrentPrompt() || "";
   navigator.clipboard.writeText(improvedPrompt).then(() => {
     console.log("[Prompter] Copied to clipboard");
     showToast("Copied");
