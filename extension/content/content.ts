@@ -2,7 +2,7 @@
 import "../ui/styles.css";
 import { mockAnalyze } from "./detector";
 import { injectUI, showOnboardingTip, clearFabFirstRun } from "./injector";
-import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel } from "../ui/analysis-panel";
+import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel, showToast, showHelpOverlay } from "../ui/analysis-panel";
 import { readCurrentPrompt, writePrompt, getComposerImages } from "../adapters/chatgpt";
 import { addTurn, getRecentTurns, syncActiveChat, resetDraftForNewChat } from "./context-store";
 import type { AnalysisResult, ImageRef, SessionTurn, AnalysisContext } from "../types";
@@ -76,6 +76,40 @@ function init(): void {
       handleImproveClick();
     }
   });
+
+  // "?" toggles the shortcut help (ignore while typing)
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault();
+      showHelpOverlay();
+    },
+    true
+  );
+
+  // Scroll-aware FAB: hide after scrolling far down, reveal when scrolling back up.
+  (() => {
+    let lastY = window.scrollY;
+    let hidden = false;
+    window.addEventListener(
+      "scroll",
+      () => {
+        const y = window.scrollY;
+        if (!hidden && y - lastY > 200) {
+          improveButton?.classList.add("prompter-fab-hidden");
+          hidden = true;
+        } else if (hidden && lastY - y > 200) {
+          improveButton?.classList.remove("prompter-fab-hidden");
+          hidden = false;
+        }
+        lastY = y;
+      },
+      { passive: true }
+    );
+  })();
 }
 
 async function maybeShowOnboarding(btn: HTMLButtonElement): Promise<void> {
@@ -286,6 +320,7 @@ function handleReplace(edited?: string): void {
   const success = writePrompt(improvedPrompt);
   if (success) {
     console.log("[Prompter] Prompt replaced successfully");
+    showToast("Replaced");
     closeAnalysisPanel();
   } else {
     showAnalysisError("Failed to replace prompt.");
@@ -297,6 +332,7 @@ function handleCopy(edited?: string): void {
   const improvedPrompt = (edited && edited.trim()) || currentAnalysis.improved_prompt || readCurrentPrompt();
   navigator.clipboard.writeText(improvedPrompt).then(() => {
     console.log("[Prompter] Copied to clipboard");
+    showToast("Copied");
   });
 }
 

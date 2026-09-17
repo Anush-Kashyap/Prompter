@@ -56,6 +56,16 @@ export function showOnboardingTip(anchor: HTMLElement, opts: { shortcut?: string
   setTimeout(close, 8000);
 
   const rect = anchor.getBoundingClientRect();
-  tip.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
-  tip.style.bottom = `${window.innerHeight - rect.top + 12}px`;
+
+  // Smart positioning: flip below the anchor when there's not enough room above.
+  const gap = 12;
+  const spaceAbove = rect.top - gap;
+  const spaceBelow = window.innerHeight - rect.bottom - gap;
+  if (spaceAbove < spaceBelow) {
+    tip.style.top = `${Math.max(8, rect.bottom + gap)}px`;
+  } else {
+    tip.style.bottom = `${Math.max(8, window.innerHeight - rect.top + gap)}px`;
+  }
+  const right = Math.max(8, window.innerWidth - rect.right);
+  tip.style.right = `${Math.min(right, Math.max(8, window.innerWidth - tip.offsetWidth - 8))}px`;
 }

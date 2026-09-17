@@ -3,6 +3,9 @@ import type { AnalysisResult } from "../types";
 
 const WINDOW_ID = "prompter-window";
 const BACKDROP_ID = "prompter-backdrop";
+const TOAST_ID = "prompter-toast";
+const HELP_ID = "prompter-help";
+const EXIT_MS = 140;
 
 let restoreFocusEl: HTMLElement | null = null;
 
@@ -24,6 +27,7 @@ export function showAnalysisPanel(
 
   const window = document.createElement("div");
   window.id = WINDOW_ID;
+  window.classList.add("prompter-panel");
   window.setAttribute("role", "dialog");
   window.setAttribute("aria-modal", "true");
   window.setAttribute("aria-label", "Prompt analysis");
@@ -178,10 +182,73 @@ export function showAnalysisError(message: string): HTMLElement {
 export function closeAnalysisPanel(): void {
   const backdrop = document.getElementById(BACKDROP_ID);
   const window = document.getElementById(WINDOW_ID);
-  if (window) window.remove();
-  if (backdrop) backdrop.remove();
-  if (restoreFocusEl && document.contains(restoreFocusEl)) restoreFocusEl.focus();
+  const focusTarget = restoreFocusEl;
   restoreFocusEl = null;
+  if (!window && !backdrop) return;
+
+  backdrop?.classList.add("prompter-exit");
+  window?.classList.add("prompter-exit");
+
+  setTimeout(() => {
+    // Only remove if no newer panel took their place during the exit.
+    if (window && document.getElementById(WINDOW_ID) === window) window.remove();
+    if (backdrop && document.getElementById(BACKDROP_ID) === backdrop) backdrop.remove();
+    // Restore focus only when nothing replaced this panel.
+    if (!document.getElementById(WINDOW_ID) && focusTarget && document.contains(focusTarget)) {
+      focusTarget.focus();
+    }
+  }, EXIT_MS);
+}
+
+// ── Minimal success toast ────────────────────────────────────
+
+export function showToast(message: string, delay = 1400): void {
+  document.getElementById(TOAST_ID)?.remove();
+  const toast = document.createElement("div");
+  toast.id = TOAST_ID;
+  toast.setAttribute("role", "status");
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add("prompter-toast--out");
+    setTimeout(() => toast.remove(), 220);
+  }, delay);
+}
+
+// ── Shortcut help overlay (toggled by "?") ───────────────────
+
+export function showHelpOverlay(): HTMLElement {
+  const existing = document.getElementById(HELP_ID);
+  if (existing) {
+    existing.remove();
+    return existing;
+  }
+
+  const isMac = /Mac|iPhone|iPad/i.test(navigator.platform);
+  const mod = isMac ? "Cmd" : "Ctrl";
+
+  const card = document.createElement("div");
+  card.id = HELP_ID;
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "Prompter shortcuts");
+
+  card.innerHTML = `
+    <div class="prompter-help-card">
+      <div class="prompter-help-title">Prompter shortcuts</div>
+      <div class="prompter-help-row"><kbd>${mod}</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd><span>Improve current prompt</span></div>
+      <div class="prompter-help-row"><kbd>?</kbd><span>Toggle this help</span></div>
+      <div class="prompter-help-row"><kbd>Escape</kbd><span>Close panel / exit edit mode</span></div>
+      <div class="prompter-help-row"><kbd>Tab</kbd><span>Move between panel controls</span></div>
+      <button class="prompter-help-close" data-close-help aria-label="Close">Got it</button>
+    </div>
+  `;
+
+  document.body.appendChild(card);
+  card.querySelector("[data-close-help]")?.addEventListener("click", () => card.remove());
+  card.addEventListener("mousedown", (e) => {
+    if (e.target === card) card.remove();
+  });
+  return card;
 }
 
 // ── Editable suggestion ("edit before replace") ─────────────

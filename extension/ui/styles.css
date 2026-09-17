@@ -68,7 +68,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   white-space: nowrap;
   user-select: none;
-  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s, opacity 0.15s;
   pointer-events: auto;
   animation: prompter-fab-entrance 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -100,9 +100,24 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
+#prompter-improve-button.prompter-fab-hidden {
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+}
+
 #prompter-improve-button.prompter-loading::before {
   content: "⟳";
   animation: prompter-spin 1s linear infinite;
+}
+
+#prompter-improve-button.prompter-loading {
+  animation: prompter-fab-busy 1.4s ease-in-out infinite;
+}
+
+@keyframes prompter-fab-busy {
+  0%, 100% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(24, 24, 27, 0.28); }
+  50% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 8px rgba(24, 24, 27, 0); }
 }
 
 /* FAB entrance + pulse for first run */
@@ -226,9 +241,36 @@
   animation: prompter-backdrop-in 0.15s ease-out;
 }
 
+#prompter-backdrop.prompter-exit {
+  animation: prompter-backdrop-out 0.14s ease-in forwards;
+  pointer-events: none;
+}
+
 @keyframes prompter-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes prompter-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Panel sections stagger in 40ms apart (spring ease) */
+.prompter-panel .prompter-window-body > * {
+  animation: prompter-panel-section 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.prompter-panel .prompter-health      { animation-delay: 0ms; }
+.prompter-panel .prompter-chips       { animation-delay: 40ms; }
+.prompter-panel .prompter-issues      { animation-delay: 80ms; }
+.prompter-panel .prompter-suggestion  { animation-delay: 120ms; }
+.prompter-panel .prompter-explanation { animation-delay: 160ms; }
+.prompter-panel .prompter-actions     { animation-delay: 200ms; }
+
+@keyframes prompter-panel-section {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ── Improve Window ────────────────────────────────────────── */
@@ -248,12 +290,21 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: prompter-window-in 0.18s ease-out;
+  animation: prompter-window-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes prompter-window-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
   to   { opacity: 1; transform: none; }
+}
+
+#prompter-window.prompter-exit {
+  animation: prompter-window-out 0.14s ease-in forwards;
+}
+
+@keyframes prompter-window-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(8px) scale(0.98); }
 }
 
 /* ── Title Bar ─────────────────────────────────────────────── */
@@ -727,7 +778,7 @@
 }
 
 .prompter-btn-primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
 }
 
 .prompter-btn-secondary {
@@ -751,13 +802,22 @@
 }
 
 .prompter-btn-primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
 }
 
 .prompter-btn-outline {
   background: var(--prompter-btn-soft);
   flex: 0 0 14%;
   min-width: 56px;
+}
+
+.prompter-btn-secondary:active,
+.prompter-btn-outline:active {
+  transform: scale(0.98);
+}
+
+.prompter-window-close:active {
+  transform: scale(0.9);
 }
 
 /* ── Footer ────────────────────────────────────────────────── */
@@ -839,6 +899,140 @@
 .prompter-loading-text {
   font-size: 12.5px;
   color: var(--prompter-muted);
+}
+
+/* ── Minimal Toast ────────────────────────────────────────── */
+
+#prompter-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  background: var(--prompter-btn-strong, #18181b);
+  color: var(--prompter-btn-ink, #fff);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  padding: 8px 16px;
+  border-radius: 24px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  animation: prompter-toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#prompter-toast.prompter-toast--out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+@keyframes prompter-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+
+/* ── Shortcut Help Overlay ────────────────────────────────── */
+
+#prompter-help {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  animation: prompter-backdrop-in 0.15s ease-out;
+  cursor: pointer;
+}
+
+.prompter-help-card {
+  background: var(--prompter-bg);
+  color: var(--prompter-ink);
+  border: 1px solid var(--prompter-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+  padding: 18px 20px;
+  min-width: 280px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  animation: prompter-window-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: default;
+}
+
+.prompter-help-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+.prompter-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  color: var(--prompter-ink-soft);
+}
+
+.prompter-help-row kbd {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 11px;
+  background: var(--prompter-chip-soft-bg);
+  color: var(--prompter-ink);
+  border: 1px solid var(--prompter-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.prompter-help-row span {
+  text-align: right;
+}
+
+.prompter-help-close {
+  margin-top: 12px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--prompter-btn-strong);
+  color: var(--prompter-btn-ink, #fff);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.prompter-help-close:hover {
+  background: var(--prompter-btn-strong-hover);
+}
+
+.prompter-help-close:active {
+  transform: scale(0.98);
+}
+
+/* ── Reduced Motion ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  #prompter-improve-button,
+  #prompter-window,
+  #prompter-backdrop,
+  #prompter-tip,
+  #prompter-toast,
+  #prompter-help,
+  .prompter-help-card,
+  .prompter-panel .prompter-window-body > *,
+  .prompter-pt,
+  .prompter-pt-section {
+    animation: none !important;
+    transition: none !important;
+  }
+  .prompter-pt-section { opacity: 1; }
 }
 
 /* ── Small Screens ─────────────────────────────────────────── */
