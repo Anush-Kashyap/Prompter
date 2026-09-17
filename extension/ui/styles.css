@@ -70,6 +70,7 @@
   user-select: none;
   transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
   pointer-events: auto;
+  animation: prompter-fab-entrance 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #prompter-improve-button::before {
@@ -103,6 +104,24 @@
   content: "⟳";
   animation: prompter-spin 1s linear infinite;
 }
+
+/* FAB entrance + pulse for first run */
+@keyframes prompter-fab-entrance {
+  0% { opacity: 0; transform: translateY(20px) scale(0.8); }
+  60% { transform: translateY(-4px) scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+
+#prompter-improve-button.prompter-first-run {
+  animation: prompter-fab-pulse 2s ease-in-out 3;
+}
+
+@keyframes prompter-fab-pulse {
+  0%, 100% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(24, 24, 27, 0.4); }
+  50% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 12px rgba(24, 24, 27, 0); }
+}
+
+/* (FAB cache badge removed — users found the count confusing) */
 
 @keyframes prompter-spin {
   to { transform: rotate(360deg); }
@@ -411,6 +430,22 @@
   font-weight: 600;
 }
 
+.prompter-visual-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--prompter-chip-soft-bg);
+  color: var(--prompter-chip-soft-ink);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Issues ────────────────────────────────────────────────── */
 
 .prompter-issues {
@@ -578,10 +613,30 @@
   border-radius: 10px;
   background: var(--prompter-bg-elevated);
   padding: 10px 14px;
+  animation: prompter-pt-reveal 0.3s ease-out;
+}
+
+@keyframes prompter-pt-reveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 .prompter-pt-section {
   margin-bottom: 10px;
+  opacity: 0;
+  animation: prompter-section-stagger 0.25s ease-out forwards;
+}
+
+.prompter-pt-section:nth-child(1) { animation-delay: 40ms; }
+.prompter-pt-section:nth-child(2) { animation-delay: 80ms; }
+.prompter-pt-section:nth-child(3) { animation-delay: 120ms; }
+.prompter-pt-section:nth-child(4) { animation-delay: 160ms; }
+.prompter-pt-section:nth-child(5) { animation-delay: 200ms; }
+.prompter-pt-section:nth-child(6) { animation-delay: 240ms; }
+
+@keyframes prompter-section-stagger {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
 
 .prompter-pt-section:last-child {
@@ -610,12 +665,14 @@
 .prompter-suggestion-text.prompter-editing {
   border-color: var(--prompter-edit-focus);
   box-shadow: 0 0 0 2px var(--prompter-edit-focus-ring);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .prompter-pt.prompter-editing .prompter-pt-text,
 .prompter-suggestion-text.prompter-editing {
   outline: none;
   border-radius: 4px;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 
 .prompter-pt.prompter-editing .prompter-pt-text:hover,
@@ -629,6 +686,15 @@
   box-shadow: 0 0 0 2px var(--prompter-edit-focus-ring);
 }
 
+/* Smooth edit mode toggle */
+.prompter-edit-toggle {
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.prompter-edit-toggle:active {
+  transform: scale(0.96);
+}
+
 /* ── Action Buttons ────────────────────────────────────────── */
 
 .prompter-actions {
@@ -638,7 +704,7 @@
 }
 
 .prompter-btn {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 10px 12px;
   border: none;
   border-radius: 10px;
@@ -666,18 +732,32 @@
 
 .prompter-btn-secondary {
   background: var(--prompter-btn-mid);
+  flex: 1 1 auto;
 }
 
 .prompter-btn-secondary:hover {
   background: var(--prompter-btn-mid-hover);
 }
 
-.prompter-btn-outline {
-  background: var(--prompter-btn-soft);
+.prompter-btn-primary {
+  background: var(--prompter-btn-strong);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  flex: 0 0 46%;
 }
 
-.prompter-btn-outline:hover {
-  background: var(--prompter-btn-soft-hover);
+.prompter-btn-primary:hover {
+  background: var(--prompter-btn-strong-hover);
+  transform: translateY(-1px);
+}
+
+.prompter-btn-primary:active {
+  transform: translateY(0);
+}
+
+.prompter-btn-outline {
+  background: var(--prompter-btn-soft);
+  flex: 0 0 14%;
+  min-width: 56px;
 }
 
 /* ── Footer ────────────────────────────────────────────────── */

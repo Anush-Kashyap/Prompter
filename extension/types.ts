@@ -4,6 +4,27 @@ export interface AnalysisIssue {
   message: string;
 }
 
+export interface ImageRef {
+  type: "data-url" | "file-ref";
+  data?: string;
+  fileName?: string;
+  mimeType?: string;
+  size?: number;
+}
+
+export interface SessionTurn {
+  prompt: string;
+  images: ImageRef[];
+  analysis: AnalysisResult;
+  timestamp: number;
+  mode: "light" | "balanced" | "deep";
+}
+
+export interface AnalysisContext {
+  recentTurns: SessionTurn[];
+  images: ImageRef[];
+}
+
 export interface AnalysisResult {
   score: number;
   intent: string;
@@ -15,4 +36,7 @@ export interface AnalysisResult {
   explanation: string;
   model: string;
   cached?: boolean;
+  context_used?: boolean;
+  referenced_turns?: number[];
+  visual_context?: string;
 }

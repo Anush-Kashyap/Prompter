@@ -2,7 +2,7 @@ import type { AnalysisResult } from "../types";
 
 // Phase 1 fallback: a lightweight local analyzer used when the
 // backend (LLM) is unavailable. Returns the same schema as /analyze.
-export function mockAnalyze(prompt: string): AnalysisResult {
+export function mockAnalyze(prompt: string, imageCount = 0): AnalysisResult {
   const lower = prompt.toLowerCase().trim();
 
   let intent = "other";
@@ -41,6 +41,9 @@ export function mockAnalyze(prompt: string): AnalysisResult {
 
   const score = Math.min(100, Math.round(confidence * 100) - issues.length * 3);
 
+  const visual = imageCount > 0 ? ` Refer to the attached image${imageCount > 1 ? "s" : ""} and use its contents.` : "";
+  const withVisual = imageCount > 0 ? prompt + "\n\n<visual_context>Use the attached image(s) as reference.</visual_context>" : prompt;
+
   return {
     score,
     intent,
@@ -48,9 +51,10 @@ export function mockAnalyze(prompt: string): AnalysisResult {
     confidence,
     issues,
     assumptions: [],
-    improved_prompt: mockImprovedPrompt(intent, prompt),
-    explanation: "Local mock analysis (backend offline). Added the most common missing context for the detected intent.",
-    model: "mock"
+    improved_prompt: mockImprovedPrompt(intent, withVisual) + visual,
+    explanation: "Local mock analysis (backend offline). Added the most common missing context for the detected intent." + (imageCount > 0 ? " Detected attached image(s)." : ""),
+    model: "mock",
+    visual_context: imageCount > 0 ? "Refer to the attached image(s)." : ""
   };
 }
 

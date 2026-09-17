@@ -57,6 +57,7 @@ export function showAnalysisPanel(
       <div class="prompter-chips">
         <span class="prompter-intent-chip">${escapeHtml(formatIntent(analysis.intent))}</span>
         ${analysis.output_format && analysis.output_format !== "other" ? `<span class="prompter-format-chip">${escapeHtml(formatFormat(analysis.output_format))}</span>` : ""}
+        ${analysis.visual_context ? `<span class="prompter-visual-chip">🖼️ ${escapeHtml(analysis.visual_context.slice(0, 40))}${analysis.visual_context.length > 40 ? "…" : ""}</span>` : ""}
       </div>
 
       <div class="prompter-issues">
@@ -329,9 +330,10 @@ function structuredPromptHtml(text: string): string {
     context: "Context",
     instructions: "Instructions",
     examples: "Examples",
-    output_format: "Output Format"
+    output_format: "Output Format",
+    visual_context: "Visual Context"
   };
-  const re = /<\s*(role|task|context|instructions|examples|output_format)\s*>\s*([\s\S]*?)\s*<\s*\/\s*\1\s*>/g;
+  const re = /<\s*(role|task|context|instructions|examples|output_format|visual_context)\s*>\s*([\s\S]*?)\s*<\s*\/\s*\1\s*>/g;
 
   const parts: string[] = [];
   let last = 0;

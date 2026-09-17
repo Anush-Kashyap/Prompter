@@ -32,9 +32,27 @@ const MODE_GUIDANCE = {
     "Mode: DEEP. Use the full tag set: <role>, <task>, <context>, <instructions>, <examples>, and <output_format>. Add constraints, edge cases, and a clarifying example when they add real value. Be comprehensive but never invent facts the user didn't imply. List critical, useful and optional issues."
 };
 
-function buildSystemPrompt(mode) {
+function buildSystemPrompt(mode, context) {
   const allowed = ["light", "balanced", "deep"];
   const guidance = MODE_GUIDANCE[allowed.includes(mode) ? mode : "balanced"] || MODE_GUIDANCE.balanced;
+
+  // Build context section if available
+  let contextSection = "";
+  if (context && (context.recentTurns?.length || context.images?.length)) {
+    const parts = ["CONTEXT FROM THIS SESSION (use to avoid repetition and build on prior intent):"];
+    if (context.recentTurns?.length) {
+      parts.push("Previous user prompts (most recent first):");
+      context.recentTurns.slice(0, 3).forEach((t, i) => {
+        const snippet = t.prompt.slice(0, 200);
+        parts.push(`  ${i + 1}. ${snippet}`);
+      });
+    }
+    if (context.images?.length) {
+      parts.push(`Attached images: ${context.images.map((i) => i.fileName || "image").join(", ")}`);
+      parts.push("Reference these explicitly in the improved prompt (e.g., 'Analyze the error in screenshot.png...').");
+    }
+    contextSection = parts.join("\n") + "\n";
+  }
 
   return [
     'You are Prompter, a prompt-improvement engine. Analyze the user\'s prompt and return a proportional improvement.',
@@ -45,6 +63,7 @@ function buildSystemPrompt(mode) {
     '- If the prompt is already clear, make only tiny clarifications and list few or no issues.',
     '- Never refuse. If the user\'s prompt touches something problematic, do not apologize or refuse: report it as a critical issue instead and still return the JSON exactly as specified.',
     guidance,
+    contextSection,
     'IMPORTANT — improved_prompt construction:',
     'The improved_prompt must be a standalone, ready-to-paste prompt written in a structured,',
     'Anthropic-style format. It is built from XML-style tags. Tag set, in order:',
@@ -54,8 +73,9 @@ function buildSystemPrompt(mode) {
     '<instructions> Ordered steps or strict requirements the AI must follow. Omit if the task is trivial.',
     '<examples>  One concise input/output example when it clearly helps. Omit otherwise.',
     '<output_format> What the final answer must look like (plain text, code block, JSON schema, bullets, table, length). Omit for trivial outputs.',
+    '<visual_context> If images are attached, describe how the prompt should reference them. Omit if no images.',
     'Rules for the tags:',
-    "- Start with <role>, then <task>, then <context>, <instructions>, <examples>, <output_format>.",
+    "- Start with <role>, then <task>, then <context>, <instructions>, <examples>, <output_format>, <visual_context>.",
     "- Each section spans one or more lines: the opening tag on its own line, the content, then the closing tag on its own line.",
     "- Derive the persona from the prompt's intent; never invent expertise the user didn't imply.",
     '- Do not add filler sections — drop tags that add no value. Keep the prompt proportional to the original.',
@@ -73,7 +93,10 @@ function buildSystemPrompt(mode) {
     '  ],',
     '  "assumptions": ["<safe assumptions you made>"],',
     '  "improved_prompt": "<the improved prompt: a ready-to-paste prompt built from the XML-style tags above. Keep its newlines. Do not escape or wrap it.>",',
-    '  "explanation": "<2-3 sentences: what you changed and why>"',
+    '  "explanation": "<2-3 sentences: what you changed and why>",',
+    "  \"context_used\": <boolean: whether session context was used to shape the improvement>,",
+    "  \"referenced_turns\": [<array of turn indices referenced, e.g. [0,1]>],",
+    "  \"visual_context\": \"<if images attached, how the prompt references them; else empty string>\"",
     '}'
   ].join("\n");
 }
@@ -92,9 +115,10 @@ app.post("/analyze", async (req, res) => {
   }
 
   const mode = req.body && req.body.mode ? String(req.body.mode) : "balanced";
+  const context = req.body && req.body.context ? req.body.context : null;
 
   try {
-    const raw = await fetchGroq(prompt, mode);
+    const raw = await fetchGroq(prompt, mode, context);
     const analysis = normalize(raw);
     res.json({ ...analysis, mode, model: MODEL });
   } catch (err) {
@@ -103,14 +127,14 @@ app.post("/analyze", async (req, res) => {
   }
 });
 
-async function fetchGroq(prompt, mode) {
+async function fetchGroq(prompt, mode, context) {
   // Attempt 1: strict JSON mode. Attempt 2: plain text, parsed defensively.
   // Some models refuse or return prose in strict JSON mode; failing hard on that
   // would silently send the user back to the mock. So we retry without it.
   let lastErr;
   for (const strictJson of [true, false]) {
     try {
-      const content = await groqCompletion(prompt, mode, strictJson);
+      const content = await groqCompletion(prompt, mode, context, strictJson);
       const parsed = parseLlmJson(content);
       if (typeof parsed.improved_prompt !== "string") {
         throw new Error("Output was not a valid analysis JSON");
@@ -124,7 +148,7 @@ async function fetchGroq(prompt, mode) {
   throw lastErr;
 }
 
-async function groqCompletion(prompt, mode, strictJson) {
+async function groqCompletion(prompt, mode, context, strictJson) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
@@ -132,7 +156,7 @@ async function groqCompletion(prompt, mode, strictJson) {
       model: MODEL,
       temperature: 0.4,
       messages: [
-        { role: "system", content: buildSystemPrompt(mode) },
+        { role: "system", content: buildSystemPrompt(mode, context) },
         { role: "user", content: prompt }
       ]
     };
@@ -196,7 +220,12 @@ function normalize(raw) {
       typeof parsed.improved_prompt === "string" && parsed.improved_prompt.trim()
         ? parsed.improved_prompt.trim()
         : "",
-    explanation: typeof parsed.explanation === "string" ? parsed.explanation : ""
+    explanation: typeof parsed.explanation === "string" ? parsed.explanation : "",
+    context_used: Boolean(parsed.context_used),
+    referenced_turns: Array.isArray(parsed.referenced_turns)
+      ? parsed.referenced_turns.filter((n) => Number.isFinite(Number(n))).map((n) => Number(n))
+      : [],
+    visual_context: typeof parsed.visual_context === "string" ? parsed.visual_context : ""
   };
 }
 

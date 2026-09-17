@@ -1,10 +1,11 @@
 // Prompter Content Script - Main Entry Point
 import "../ui/styles.css";
 import { mockAnalyze } from "./detector";
-import { injectUI, showOnboardingTip } from "./injector";
+import { injectUI, showOnboardingTip, clearFabFirstRun } from "./injector";
 import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel } from "../ui/analysis-panel";
-import { readCurrentPrompt, writePrompt } from "../adapters/chatgpt";
-import type { AnalysisResult } from "../types";
+import { readCurrentPrompt, writePrompt, getComposerImages } from "../adapters/chatgpt";
+import { addTurn, getRecentTurns } from "./context-store";
+import type { AnalysisResult, ImageRef, SessionTurn, AnalysisContext } from "../types";
 
 export type RewriteMode = "light" | "balanced" | "deep";
 
@@ -36,6 +37,7 @@ function init(): void {
     improveButton = btn;
     improveButton.addEventListener("click", handleImproveClick);
     console.log("[Prompter] Initialized on ChatGPT");
+    clearFabFirstRun();
     maybeShowOnboarding(btn);
   });
 
@@ -130,18 +132,34 @@ async function handleModeChange(mode: RewriteMode): Promise<void> {
 }
 
 async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<AnalysisResult> {
-  const key = await promptHash(prompt, mode);
+  // Gather session context and attached images
+  const recentTurns = await getRecentTurns(3);
+  const images = getComposerImages();
 
-  // 1) Cache hit: return memoized analysis without hitting the backend
+  // Cache key includes prompt + mode + image hashes (so different images = different cache)
+  const imageHashes = images.map((img) => img.data?.slice(0, 50) || "").sort().join("|");
+  const key = await promptHash(`${prompt}|${mode}|${imageHashes}`);
+
+  // 1) Cache hit
   const cached = await cachedAnalysis(key);
   if (cached) {
     console.log("[Prompter] Using cached analysis");
     return { ...cached, cached: true };
   }
 
-  // 2) Miss: call the backend via the service worker
+  // 2) Build context payload for backend (drop heavy data URLs — the backend
+  //    only needs file names; we keep data locally for the cache key above)
+  const slimImages = images.map((img) => ({
+    type: img.type,
+    fileName: img.fileName,
+    mimeType: img.mimeType,
+    size: img.size
+  }));
+  const context: AnalysisContext = { recentTurns, images: slimImages };
+
+  // 3) Call backend via service worker
   try {
-    const response = await chrome.runtime.sendMessage({ type: "analyze", prompt, mode });
+    const response = await chrome.runtime.sendMessage({ type: "analyze", prompt, mode, context });
 
     if (!response || !response.ok) {
       throw new Error(response?.error || "Background returned no data");
@@ -154,11 +172,16 @@ async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<Analysi
 
     const analysis = json as AnalysisResult;
     await storeAnalysis(key, analysis);
+
+    // Save this turn to session context (metadata only — no data URLs)
+    await addTurn({ prompt, images: slimImages, analysis, timestamp: Date.now(), mode });
+
     return analysis;
   } catch (err) {
     console.warn("[Prompter] Backend unavailable, using local mock:", err);
-    const analysis = mockAnalyze(prompt);
+    const analysis = mockAnalyze(prompt, slimImages.length);
     await storeAnalysis(key, analysis);
+    await addTurn({ prompt, images: slimImages, analysis, timestamp: Date.now(), mode });
     return analysis;
   }
 }
@@ -217,7 +240,9 @@ async function storeAnalysis(key: string, analysis: AnalysisResult): Promise<voi
           .forEach((k) => delete cache[k]);
       }
 
-      chrome.storage.local.set({ prompterCache: cache }, resolve);
+      chrome.storage.local.set({ prompterCache: cache }, () => {
+        resolve();
+      });
     });
   });
 }

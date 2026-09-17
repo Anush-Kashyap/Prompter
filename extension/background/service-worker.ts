@@ -25,7 +25,7 @@ chrome.commands.onCommand.addListener((command) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "analyze") {
-    handleAnalyze(message.prompt, message.mode)
+    handleAnalyze(message.prompt, message.mode, message.context)
       .then((result) => sendResponse({ ok: true, data: result }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true; // async response
@@ -34,7 +34,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-async function handleAnalyze(prompt, mode) {
+async function handleAnalyze(prompt, mode, context) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -42,7 +42,7 @@ async function handleAnalyze(prompt, mode) {
     const resp = await fetch(`${BACKEND_URL}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, mode }),
+      body: JSON.stringify({ prompt, mode, context }),
       signal: controller.signal
     });
 

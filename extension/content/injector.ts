@@ -12,6 +12,9 @@ export async function injectUI(): Promise<HTMLButtonElement> {
   button.title = "Improve prompt with Prompter";
   button.setAttribute("aria-label", "Improve prompt with Prompter");
 
+  // Mark for first-run pulse animation
+  button.classList.add("prompter-first-run");
+
   document.body.appendChild(button);
 
   return button;
@@ -19,6 +22,11 @@ export async function injectUI(): Promise<HTMLButtonElement> {
 
 export function getImproveButton(): HTMLButtonElement | null {
   return document.getElementById("prompter-improve-button") as HTMLButtonElement | null;
+}
+
+export function clearFabFirstRun(): void {
+  const button = getImproveButton();
+  button?.classList.remove("prompter-first-run");
 }
 
 // One-time onboarding tooltip anchored above the FAB.

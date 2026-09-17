@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Prompter",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "description": "AI Prompt Intelligence Layer",
   "permissions": [
     "storage",
