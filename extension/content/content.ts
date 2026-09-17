@@ -4,7 +4,7 @@ import { mockAnalyze } from "./detector";
 import { injectUI, showOnboardingTip, clearFabFirstRun } from "./injector";
 import { showAnalysisPanel, showAnalysisLoading, showAnalysisError, closeAnalysisPanel } from "../ui/analysis-panel";
 import { readCurrentPrompt, writePrompt, getComposerImages } from "../adapters/chatgpt";
-import { addTurn, getRecentTurns } from "./context-store";
+import { addTurn, getRecentTurns, syncActiveChat, resetDraftForNewChat } from "./context-store";
 import type { AnalysisResult, ImageRef, SessionTurn, AnalysisContext } from "../types";
 
 export type RewriteMode = "light" | "balanced" | "deep";
@@ -30,6 +30,35 @@ function init(): void {
       if (stored && stored.prompterMode) currentMode = stored.prompterMode;
     });
   }
+
+  // Identify the active chat and load its context
+  syncActiveChat().catch(() => {});
+
+  // Watch for SPA navigation (ChatGPT is a single-page app):
+  // patch pushState/replaceState so we detect chat switches without reloads.
+  const patchNav = (fn: "pushState" | "replaceState") => {
+    const orig = history[fn];
+    history[fn] = function (...args) {
+      const result = orig.apply(this, args);
+      syncActiveChat().catch(() => {});
+      return result;
+    };
+  };
+  patchNav("pushState");
+  patchNav("replaceState");
+  window.addEventListener("popstate", () => syncActiveChat().catch(() => {}));
+
+  // Reset draft context when the user clicks "New chat"
+  document.addEventListener(
+    "click",
+    (e) => {
+      const t = (e.target as HTMLElement).closest(
+        '[data-testid="new-chat-button"], a[aria-label*="New chat" i], a[aria-label*="Start new chat" i]'
+      );
+      if (t) resetDraftForNewChat().catch(() => {});
+    },
+    true
+  );
 
   // Inject the floating Improve button (always visible, bottom-right)
   injectUI().then((btn) => {
@@ -132,13 +161,17 @@ async function handleModeChange(mode: RewriteMode): Promise<void> {
 }
 
 async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<AnalysisResult> {
+  // Make sure context is keyed to the correct chat before reading history
+  const chatId = await syncActiveChat();
+
   // Gather session context and attached images
   const recentTurns = await getRecentTurns(3);
   const images = getComposerImages();
 
-  // Cache key includes prompt + mode + image hashes (so different images = different cache)
+  // Cache key includes chat id + prompt + mode + image hashes, so cached
+  // results never leak between different conversations.
   const imageHashes = images.map((img) => img.data?.slice(0, 50) || "").sort().join("|");
-  const key = await promptHash(`${prompt}|${mode}|${imageHashes}`);
+  const key = await promptHash(`${chatId}|${prompt}|${mode}|${imageHashes}`);
 
   // 1) Cache hit
   const cached = await cachedAnalysis(key);
@@ -155,7 +188,7 @@ async function analyzePrompt(prompt: string, mode: RewriteMode): Promise<Analysi
     mimeType: img.mimeType,
     size: img.size
   }));
-  const context: AnalysisContext = { recentTurns, images: slimImages };
+  const context: AnalysisContext = { chatId, recentTurns, images: slimImages };
 
   // 3) Call backend via service worker
   try {
@@ -195,16 +228,15 @@ interface CacheMap {
   [key: string]: CacheEntry;
 }
 
-async function promptHash(prompt: string, mode: string): Promise<string> {
+async function promptHash(key: string): Promise<string> {
   try {
-    const data = new TextEncoder().encode(`${mode}:${prompt}`);
+    const data = new TextEncoder().encode(key);
     const digest = await crypto.subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(digest)).slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
   } catch {
     // Fallback: stable-ish hash if SubtleCrypto is unavailable
     let h = 5381;
-    const s = `${mode}:${prompt}`;
-    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < key.length; i++) h = ((h << 5) + h + key.charCodeAt(i)) >>> 0;
     return h.toString(16);
   }
 }

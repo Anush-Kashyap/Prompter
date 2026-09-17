@@ -70,7 +70,7 @@ function detectOutputFormat(lower: string): string {
 function mockImprovedPrompt(intent: string, prompt: string): string {
   if (intent === "website_design") {
     return [
-      "<role>You are an expert front-end developer and designer specializing in modern, conversion-focused college and event websites.</role>",
+      "<role>You are a professional web designer and front-end developer specializing in modern, conversion-focused college and event websites.</role>",
       "<task>Design and build a modern website for Tathva, a college technology festival.</task>",
       "<context>The target audience is college students and prospective participants. Visual direction should be futuristic and technology-focused. The site must feel alive, energetic and responsive on all devices.</context>",
       "<instructions>",
@@ -101,7 +101,7 @@ function mockImprovedPrompt(intent: string, prompt: string): string {
 
   if (intent === "learning") {
     return [
-      "<role>You are an experienced educator who explains complex topics in plain, intuitive language.</role>",
+      "<role>You are an experienced educator and learning designer who explains complex topics in plain, intuitive language.</role>",
       "<task>Explain the concept clearly, from intuition to implementation.</task>",
       "<context>Audience is a learner with basic programming knowledge. Depth should go beyond surface-level, but start accessible.</context>",
       "<instructions>",
@@ -116,7 +116,7 @@ function mockImprovedPrompt(intent: string, prompt: string): string {
 
   if (intent === "brainstorming") {
     return [
-      "<role>You are a creative strategist who generates structured, evaluable ideas.</role>",
+      "<role>You are a creative strategist, brand thinker, and product consultant who generates structured, evaluable ideas.</role>",
       `<task>Generate a diverse set of ideas around: ${prompt.trim()}.</task>`,
       "<context>Provide 6-10 varied ideas. Note which are practical, which are ambitious, and under what constraints each would succeed.</context>",
       "<instructions>",
@@ -130,7 +130,7 @@ function mockImprovedPrompt(intent: string, prompt: string): string {
   }
 
   return [
-    "<role>You are an expert assistant who produces clear, high-quality answers.</role>",
+    "<role>You are a meticulous editor, researcher, and subject-matter specialist who produces clear, high-quality work.</role>",
     `<task>${prompt.trim()}</task>`,
     "<context>Provide only what is needed; avoid generic filler. If critical information is missing, flag it in your response rather than guess.</context>",
     "<instructions>",

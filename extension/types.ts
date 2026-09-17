@@ -21,6 +21,7 @@ export interface SessionTurn {
 }
 
 export interface AnalysisContext {
+  chatId?: string;
   recentTurns: SessionTurn[];
   images: ImageRef[];
 }

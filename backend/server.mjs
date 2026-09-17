@@ -44,12 +44,16 @@ function buildSystemPrompt(mode, context) {
       parts.push("Previous user prompts (most recent first):");
       context.recentTurns.slice(0, 3).forEach((t, i) => {
         const snippet = t.prompt.slice(0, 200);
-        parts.push(`  ${i + 1}. ${snippet}`);
+        const imgNote = t.images && t.images.length
+          ? ` (image attached: ${t.images.map((i) => i.fileName || "image").join(", ")})`
+          : "";
+        parts.push(`  ${i + 1}. ${snippet}${imgNote}`);
       });
+      parts.push("IMPORTANT: If an earlier turn involved an image, carry that visual context forward — keep the improved prompt aware that this conversation has an image element.");
     }
     if (context.images?.length) {
-      parts.push(`Attached images: ${context.images.map((i) => i.fileName || "image").join(", ")}`);
-      parts.push("Reference these explicitly in the improved prompt (e.g., 'Analyze the error in screenshot.png...').");
+      parts.push(`Currently attached images: ${context.images.map((i) => i.fileName || "image").join(", ")}`);
+      parts.push("Reference the attached image(s) explicitly in the improved prompt.");
     }
     contextSection = parts.join("\n") + "\n";
   }
@@ -67,16 +71,17 @@ function buildSystemPrompt(mode, context) {
     'IMPORTANT — improved_prompt construction:',
     'The improved_prompt must be a standalone, ready-to-paste prompt written in a structured,',
     'Anthropic-style format. It is built from XML-style tags. Tag set, in order:',
-    '<role>      The persona the AI should act as. Begin the content with "You are...". Omit if a persona adds nothing.',
+    '<role>      The perspective the AI should adopt: a specific human professional matched to the intent (e.g. "a professional photographer", "a senior software engineer", "an experienced chef", "a seasoned UX designer", "a published fiction author"). NEVER use "an AI assistant" — always a human expert role. Begin the content with "You are a...". Omit if a persona adds no value.',
     '<task>      The core task, stated precisely. Always include.',
     '<context>   Background, audience, constraints and safe assumptions. Omit if nothing is needed.',
     '<instructions> Ordered steps or strict requirements the AI must follow. Omit if the task is trivial.',
     '<examples>  One concise input/output example when it clearly helps. Omit otherwise.',
     '<output_format> What the final answer must look like (plain text, code block, JSON schema, bullets, table, length). Omit for trivial outputs.',
-    '<visual_context> If images are attached, describe how the prompt should reference them. Omit if no images.',
+    '<visual_context> If images are part of this conversation (currently or in an earlier turn), describe how the prompt should reference them. Omit only if no image was ever involved.',
     'Rules for the tags:',
     "- Start with <role>, then <task>, then <context>, <instructions>, <examples>, <output_format>, <visual_context>.",
     "- Each section spans one or more lines: the opening tag on its own line, the content, then the closing tag on its own line.",
+    "- Always give <role> a human professional persona (e.g. 'You are a professional landscape photographer'), never a generic 'AI assistant'.",
     "- Derive the persona from the prompt's intent; never invent expertise the user didn't imply.",
     '- Do not add filler sections — drop tags that add no value. Keep the prompt proportional to the original.',
     '- Never wrap the structured prompt in backticks, triple backticks, quotes or JSON escaping.',
