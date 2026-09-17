@@ -184,7 +184,7 @@ flowchart TB
 
     INPUT -->|reads / replaces| ADAPTER
     ADAPTER --> CS
-    CS -->|context, images (metadata)| API
+    CS -->|context + image metadata| API
     ADAPTER --> UILAYER
     UI2 --> UILAYER
     UILAYER -->|message /analyze| API
